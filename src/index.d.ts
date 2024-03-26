@@ -102,6 +102,12 @@ export interface TimelinesChartGenericInstance<ChainableInstance> {
     val: Val,
     timeRange: Range<TS>
   }) => void): ChainableInstance;
+  onSegmentResize(cb: (segment: {
+    group: string,
+    label: string,
+    val: Val,
+    timeRange: Range<TS>
+  }) => void): ChainableInstance;
 
   segmentTooltipContent(cb: (segment: {
     group: string,

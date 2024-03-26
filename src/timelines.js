@@ -27,6 +27,11 @@ import {
   pointer as d3Pointer,
   select as d3Select
 } from 'd3-selection';
+
+import {
+  drag as d3Drag,
+} from 'd3-drag';
+
 import {
   timeFormat as d3TimeFormat,
   utcFormat as d3UtcFormat
@@ -148,7 +153,8 @@ export default Kapsule({
     // Callbacks
     onZoom: {}, // When user zooms in / resets zoom. Returns ([startX, endX], [startY, endY])
     onLabelClick: {}, // When user clicks on a group or y label. Returns (group) or (label, group) respectively
-    onSegmentClick: {} // When user clicks on a segment. Returns (segment object) respectively
+    onSegmentClick: {}, // When user clicks on a segment. Returns (segment object) respectively
+    onSegmentResize: {} // When user resizes a segment. Returns (segment object) respectively
   },
 
   methods: {
@@ -504,7 +510,11 @@ export default Kapsule({
       state.graph.on('mousedown', function (event) {
         if (d3Select(window).on('mousemove.zoomRect')!=null) // Selection already active
           return;
-
+        if (d3Select(window).on('mousemove.segmentResize')!=null) // Selection already active
+          return;
+        if (event.target.classList.contains('series-segment')) {
+          return;
+        }
         const startCoords = getPointerCoords(event);
 
         if (startCoords[0] < 0 || startCoords[0] > state.graphW || startCoords[1] < 0 || startCoords[1] > state.graphH)
@@ -979,6 +989,7 @@ export default Kapsule({
         .attr('y', state.graphH/2)
         .attr('width', 0)
         .attr('height', 0)
+        .attr('cursor', 'pointer')
         .style('fill', d => state.zColorScale(d.val))
         .style('fill-opacity', 0)
         .on('mouseover.groupTooltip', state.groupTooltip.show)
@@ -987,6 +998,23 @@ export default Kapsule({
         .on('mouseout.lineTooltip', state.lineTooltip.hide)
         .on('mouseover.segmentTooltip', state.segmentTooltip.show)
         .on('mouseout.segmentTooltip', state.segmentTooltip.hide);
+
+      const resizeOffset = 10;
+
+      newSegments
+        .on('mousemove', function(ev) {
+          // for some reason
+          const segment = d3Select(this);
+          const segmentWidth = +segment.attr('width');
+          const mouseX = ev.clientX - ev.target.getBoundingClientRect().x;
+          if (mouseX <= resizeOffset) { // Close to the left side
+            segment.attr('cursor', 'w-resize');
+          } else if (mouseX >= segmentWidth - resizeOffset) { // Close to the right side
+            segment.attr('cursor', 'e-resize');
+          } else {
+            segment.attr('cursor', 'pointer');
+          }
+        });
 
       newSegments
         .on('mouseover', function() {
@@ -1013,6 +1041,9 @@ export default Kapsule({
         })
         .on('mouseout', function() {
           d3Select(this)
+            .attr('cursor', 'pointer');
+
+          d3Select(this)
             .transition().duration(250)
             .attr('x', function (d) {
               return state.xScale(d.timeRange[0]);
@@ -1030,6 +1061,50 @@ export default Kapsule({
           if (state.onSegmentClick)
             state.onSegmentClick(s);
         });
+
+      newSegments.call(d3Drag()
+        .on('start', function (ev) {
+          const segment = d3Select(this);
+          const segmentWidth = +segment.attr('width');
+          const mouseX = ev.x - +segment.attr('x');
+
+          if (mouseX <= resizeOffset) { // Close to the left side
+            segment.node().dragBehavior = 'resizeLeft';
+          } else if (mouseX >= segmentWidth - resizeOffset) { // Close to the right side
+            segment.node().dragBehavior = 'resizeRight';
+          } else {
+            segment.node().dragBehavior = 'move';
+          }
+        })
+        .on('drag', function (ev) {
+          const segment = d3Select(this);
+          const dragBehavior = segment.node().dragBehavior;
+          const dx = ev.dx;
+
+          if (dragBehavior === 'resizeLeft') {
+            const newWidth = +segment.attr('width') - dx;
+            segment.attr('width', newWidth).attr('x', +segment.attr('x') + dx);
+          } else if (dragBehavior === 'resizeRight') {
+            const newWidth = +segment.attr('width') + dx;
+            segment.attr('width', newWidth);
+          } else {
+            segment.attr('x', +segment.attr('x') + dx);
+          }
+        })
+        .on('end', function (ev, s) {
+          const segment = d3Select(this);
+          segment.attr('cursor', 'pointer');
+          const newWidth = +segment.attr('width');
+          const newX = +segment.attr('x');
+          const timeRangeStart = state.xScale.invert(newX);
+          const timeRangeEnd = state.xScale.invert(newX + newWidth);
+
+          // Update the timeRange in the data object 'd'
+          s.timeRange = [timeRangeStart, timeRangeEnd];
+          if (state.onSegmentResize)
+            state.onSegmentResize(s);
+        })
+      )
 
       timelines = timelines.merge(newSegments);
 
