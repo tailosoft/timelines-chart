@@ -48,7 +48,7 @@ export interface TimelinesChartGenericInstance<ChainableInstance> {
   bottomMargin(margin: number): ChainableInstance;
 
   data(): Group[];
-  data(data: Group[]): ChainableInstance;
+  data(data: {chartsData: Group[], keepZoom: boolean}): ChainableInstance;
 
   useUtc(): boolean;
   useUtc(utc: boolean): ChainableInstance;

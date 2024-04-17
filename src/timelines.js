@@ -50,19 +50,21 @@ export default Kapsule({
     data: {
       default: [],
       onChange(data, state) {
-        parseData(data);
+        parseData(data.chartsData ?? []);
 
-        state.zoomX = [
-          d3Min(state.completeFlatData, d => d.timeRange[0]),
-          d3Max(state.completeFlatData, d => d.timeRange[1])
-        ];
+        if (!data.keepZoom) {
+          state.zoomX = [
+            d3Min(state.completeFlatData, d => d.timeRange[0]),
+            d3Max(state.completeFlatData, d => d.timeRange[1])
+          ];
 
-        state.zoomY = [null, null];
+          state.zoomY = [null, null];
 
-        if (state.overviewArea) {
-          state.overviewArea
-            .domainRange(state.zoomX)
-            .currentSelection(state.zoomX);
+          if (state.overviewArea) {
+            state.overviewArea
+                .domainRange(state.zoomX)
+                .currentSelection(state.zoomX);
+          }
         }
 
         //
