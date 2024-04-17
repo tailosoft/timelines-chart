@@ -1111,6 +1111,41 @@ export default Kapsule({
         })
       )
 
+      newSegments.on("wheel", event => {
+        const getPointerCoords = event => d3Pointer(event, state.graph.node());
+        event.preventDefault();
+        if (event.altKey && event.ctrlKey) {
+
+          const pointerCoords = getPointerCoords(event);
+
+          let newDomainX;
+          if (event.deltaY < 0) {
+            // scrolling up
+            newDomainX = [pointerCoords[0] - event.pageY, pointerCoords[0] + event.pageY].sort(d3Ascending).map(state.xScale.invert);
+          } else {
+            // scrolling down
+            const minRange = d3Min(state.completeFlatData, d => d.timeRange[0]);
+            const maxRange = d3Max(state.completeFlatData, d => d.timeRange[1]);
+            let x0 = +state.zoomX[0] - event.pageY;
+            let x1 = +state.zoomX[1] + event.pageY;
+            x0 = x0 < minRange ? minRange : x0;
+            x1 = x1 > maxRange ? maxRange : x1;
+            newDomainX = [x0, x1];
+          }
+
+          const newDomainY = [pointerCoords[1], pointerCoords[1]].sort(d3Ascending).map(d =>
+              state.yScale.domain().indexOf(state.yScale.invert(d))
+              + ((state.zoomY && state.zoomY[0])?state.zoomY[0]:0)
+          );
+
+          state.svg.dispatch('zoom', { detail: {
+              zoomX: newDomainX,
+              zoomY: newDomainY
+            }});
+
+        }
+      })
+
       timelines = timelines.merge(newSegments);
 
       timelines.transition().duration(state.transDuration)
