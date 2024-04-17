@@ -1169,6 +1169,36 @@ export default Kapsule({
         })
       )
 
+      state.graph.on("wheel", event => {
+        event.stopPropagation();
+        event.preventDefault();
+        const getPointerCoords = event => d3Pointer(event, state.graph.node());
+        if (event.altKey && event.ctrlKey) {
+
+          const pointerCoords = getPointerCoords(event);
+
+          let newDomainX;
+          if (event.deltaY < 0) {
+            // scrolling up
+            newDomainX = [pointerCoords[0] - event.pageY, pointerCoords[0] + event.pageY].sort(d3Ascending).map(state.xScale.invert);
+          } else {
+            // scrolling down
+            const minRange = d3Min(state.completeFlatData, d => d.timeRange[0]);
+            const maxRange = d3Max(state.completeFlatData, d => d.timeRange[1]);
+            let x0 = +state.zoomX[0] - event.pageX;
+            let x1 = +state.zoomX[1] + event.pageX;
+            x0 = x0 < minRange ? minRange : x0;
+            x1 = x1 > maxRange ? maxRange : x1;
+            newDomainX = [x0, x1];
+          }
+
+          state.svg.dispatch('zoom', { detail: {
+              zoomX: newDomainX,
+            }});
+
+        }
+      })
+
       timelines = timelines.merge(newSegments);
 
       timelines.transition().duration(state.transDuration)
