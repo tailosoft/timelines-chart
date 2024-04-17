@@ -1081,6 +1081,8 @@ export default Kapsule({
           const dragBehavior = segment.node().dragBehavior;
           const dx = ev.dx;
 
+          segment.node().draggable = true;
+
           if (dragBehavior === 'resizeLeft') {
             const newWidth = +segment.attr('width') - dx;
             segment.attr('width', newWidth).attr('x', +segment.attr('x') + dx);
@@ -1101,8 +1103,9 @@ export default Kapsule({
 
           // Update the timeRange in the data object 'd'
           s.timeRange = [timeRangeStart, timeRangeEnd];
-          if (state.onSegmentResize)
+          if (state.onSegmentResize && segment.node().draggable)
             state.onSegmentResize(s);
+          segment.node().draggable = undefined;
         })
       )
 
