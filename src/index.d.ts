@@ -11,6 +11,7 @@ export interface Line {
 export interface Segment {
   timeRange: [TS, TS];
   val: Val;
+  selected?: boolean;
 }
 
 export type TS = Date | number;
@@ -48,7 +49,7 @@ export interface TimelinesChartGenericInstance<ChainableInstance> {
   bottomMargin(margin: number): ChainableInstance;
 
   data(): Group[];
-  data(data: Group[]): ChainableInstance;
+  data(data: {chartsData: Group[], keepZoom: boolean}): ChainableInstance;
 
   useUtc(): boolean;
   useUtc(utc: boolean): ChainableInstance;
@@ -107,7 +108,7 @@ export interface TimelinesChartGenericInstance<ChainableInstance> {
     label: string,
     val: Val,
     timeRange: Range<TS>
-  }) => void): ChainableInstance;
+  }[]) => void): ChainableInstance;
 
   segmentTooltipContent(cb: (segment: {
     group: string,

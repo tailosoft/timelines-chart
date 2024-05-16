@@ -25,7 +25,8 @@ import {
 
 import {
   pointer as d3Pointer,
-  select as d3Select
+  select as d3Select,
+  selectAll as d3SelectAll
 } from 'd3-selection';
 
 import {
@@ -50,19 +51,21 @@ export default Kapsule({
     data: {
       default: [],
       onChange(data, state) {
-        parseData(data);
+        parseData(data.chartsData ?? []);
 
-        state.zoomX = [
-          d3Min(state.completeFlatData, d => d.timeRange[0]),
-          d3Max(state.completeFlatData, d => d.timeRange[1])
-        ];
+        if (!data.keepZoom) {
+          state.zoomX = [
+            d3Min(state.completeFlatData, d => d.timeRange[0]),
+            d3Max(state.completeFlatData, d => d.timeRange[1])
+          ];
 
-        state.zoomY = [null, null];
+          state.zoomY = [null, null];
 
-        if (state.overviewArea) {
-          state.overviewArea
-            .domainRange(state.zoomX)
-            .currentSelection(state.zoomX);
+          if (state.overviewArea) {
+            state.overviewArea
+                .domainRange(state.zoomX)
+                .currentSelection(state.zoomX);
+          }
         }
 
         //
@@ -594,6 +597,31 @@ export default Kapsule({
         .on('mouseout', function() {
           d3Select(this).style('opacity', .6);
         });
+
+      state.unselectBtn = state.svg.append('text')
+        .attr('class', 'reset-zoom-btn')
+        .text('Unselect Segments')
+        .style('text-anchor', 'end')
+        .on('mouseup' , function() {
+          state.unselectBtn
+              .style('visibility', 'hidden')
+          const segments = Array.from(d3SelectAll('rect[selected="true"]'));
+          for (let i= 0, len=segments.length; i<len; i++) {
+            const seg = d3Select(segments[i]);
+            seg
+                .attr('stroke', "none")
+                .attr('selected', "none");
+            const s = seg.data()[0];
+            s.selected = false;
+          }
+
+        })
+        .on('mouseover', function(){
+          d3Select(this).style('opacity', 1);
+        })
+        .on('mouseout', function() {
+          d3Select(this).style('opacity', .6);
+        });
     }
 
     function setEvents() {
@@ -817,6 +845,21 @@ export default Kapsule({
           height: Math.min(13,state.topMargin *.8)
         })
         (state.resetBtn.node());
+
+      state.unselectBtn
+          .transition()
+          .attr('x', state.leftMargin + 1600)
+          .attr('y', state.topMargin * .8);
+
+
+      TextFitToBox()
+          .bbox({
+            width: state.graphW * .9,
+            height: Math.min(13, state.topMargin * .8)
+          })
+          (state.unselectBtn.node());
+      state.unselectBtn
+          .style('visibility', 'hidden')
     }
 
     function renderAxises() {
@@ -1058,8 +1101,29 @@ export default Kapsule({
             .style('fill-opacity', .8);
         })
         .on('click', function (ev, s) {
-          if (state.onSegmentClick)
+          if (ev.ctrlKey && state.onSegmentClick) {
+            if (s.selected) {
+              s.selected= false;
+              d3Select(this)
+                  .attr('stroke', "none")
+                  .attr('selected', "none");
+            } else {
+              s.selected = true;
+              d3Select(this)
+                  .attr('stroke', "rgb(99,229,227)")
+                  .attr('selected', true)
+                  .attr('stroke-width', 3);
+            }
+            if (Array.from(d3SelectAll('rect[selected="true"]')).length) {
+              state.unselectBtn
+                  .style('visibility', 'visible')
+            } else {
+              state.unselectBtn
+                  .style('visibility', 'hidden')
+            }
+          } else if (state.onSegmentClick) {
             state.onSegmentClick(s);
+          }
         });
 
       newSegments.call(d3Drag()
@@ -1076,35 +1140,107 @@ export default Kapsule({
             segment.node().dragBehavior = 'move';
           }
         })
-        .on('drag', function (ev) {
+        .on('drag', function (ev, s) {
           const segment = d3Select(this);
           const dragBehavior = segment.node().dragBehavior;
           const dx = ev.dx;
 
-          if (dragBehavior === 'resizeLeft') {
-            const newWidth = +segment.attr('width') - dx;
-            segment.attr('width', newWidth).attr('x', +segment.attr('x') + dx);
-          } else if (dragBehavior === 'resizeRight') {
-            const newWidth = +segment.attr('width') + dx;
-            segment.attr('width', newWidth);
+          segment.node().draggable = true;
+          if (s.selected) {
+            const segments = Array.from(d3SelectAll('rect[selected="true"]'));
+            for (let i= 0, len=segments.length; i<len; i++) {
+              const seg = d3Select(segments[i]);
+              if (dragBehavior === 'resizeLeft') {
+                const newWidth = +seg.attr('width') - dx;
+                seg.attr('width', newWidth).attr('x', +seg.attr('x') + dx);
+              } else if (dragBehavior === 'resizeRight') {
+                const newWidth = +seg.attr('width') + dx;
+                seg.attr('width', newWidth);
+              } else {
+                seg.attr('x', +seg.attr('x') + dx);
+              }
+            }
           } else {
-            segment.attr('x', +segment.attr('x') + dx);
+            if (dragBehavior === 'resizeLeft') {
+              const newWidth = +segment.attr('width') - dx;
+              segment.attr('width', newWidth).attr('x', +segment.attr('x') + dx);
+            } else if (dragBehavior === 'resizeRight') {
+              const newWidth = +segment.attr('width') + dx;
+              segment.attr('width', newWidth);
+            } else {
+              segment.attr('x', +segment.attr('x') + dx);
+            }
           }
         })
         .on('end', function (ev, s) {
           const segment = d3Select(this);
           segment.attr('cursor', 'pointer');
-          const newWidth = +segment.attr('width');
-          const newX = +segment.attr('x');
-          const timeRangeStart = state.xScale.invert(newX);
-          const timeRangeEnd = state.xScale.invert(newX + newWidth);
+          if (s.selected) {
+            const segments = Array.from(d3SelectAll('rect[selected="true"]'));
+            const d = [];
+            for (let i= 0, len=segments.length; i<len; i++) {
+              const seg = d3Select(segments[i]);
+              const newWidth = +seg.attr('width');
+              const newX = +seg.attr('x');
+              const timeRangeStart = state.xScale.invert(newX);
+              const timeRangeEnd = state.xScale.invert(newX + newWidth);
 
-          // Update the timeRange in the data object 'd'
-          s.timeRange = [timeRangeStart, timeRangeEnd];
-          if (state.onSegmentResize)
-            state.onSegmentResize(s);
+              // Update the timeRange in the data object 'd'
+              const s = seg.data()[0];
+              s.timeRange = [timeRangeStart, timeRangeEnd];
+              d.push(s);
+            }
+            if (state.onSegmentResize && segment.node().draggable)
+              state.onSegmentResize(d);
+          } else {
+            const newWidth = +segment.attr('width');
+            const newX = +segment.attr('x');
+            const timeRangeStart = state.xScale.invert(newX);
+            const timeRangeEnd = state.xScale.invert(newX + newWidth);
+
+            // Update the timeRange in the data object 'd'
+            s.timeRange = [timeRangeStart, timeRangeEnd];
+            if (state.onSegmentResize && segment.node().draggable)
+              state.onSegmentResize([s]);
+          }
+          segment.node().draggable = undefined;
         })
       )
+
+      newSegments.on("wheel", event => {
+        const getPointerCoords = event => d3Pointer(event, state.graph.node());
+        event.preventDefault();
+        if (event.altKey && event.ctrlKey) {
+
+          const pointerCoords = getPointerCoords(event);
+
+          let newDomainX;
+          if (event.deltaY < 0) {
+            // scrolling up
+            newDomainX = [pointerCoords[0] - event.pageY, pointerCoords[0] + event.pageY].sort(d3Ascending).map(state.xScale.invert);
+          } else {
+            // scrolling down
+            const minRange = d3Min(state.completeFlatData, d => d.timeRange[0]);
+            const maxRange = d3Max(state.completeFlatData, d => d.timeRange[1]);
+            let x0 = +state.zoomX[0] - event.pageY;
+            let x1 = +state.zoomX[1] + event.pageY;
+            x0 = x0 < minRange ? minRange : x0;
+            x1 = x1 > maxRange ? maxRange : x1;
+            newDomainX = [x0, x1];
+          }
+
+          const newDomainY = [pointerCoords[1], pointerCoords[1]].sort(d3Ascending).map(d =>
+              state.yScale.domain().indexOf(state.yScale.invert(d))
+              + ((state.zoomY && state.zoomY[0])?state.zoomY[0]:0)
+          );
+
+          state.svg.dispatch('zoom', { detail: {
+              zoomX: newDomainX,
+              zoomY: newDomainY
+            }});
+
+        }
+      })
 
       timelines = timelines.merge(newSegments);
 

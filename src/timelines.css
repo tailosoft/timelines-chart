@@ -47,7 +47,7 @@
   }
 
   .series-segment {
-    stroke: none;
+    /*stroke: none;*/
     resize: horizontal;
   }
 
