@@ -48,7 +48,7 @@ export interface TimelinesChartGenericInstance<ChainableInstance> {
   bottomMargin(margin: number): ChainableInstance;
 
   data(): Group[];
-  data(data: Group[]): ChainableInstance;
+  data(data: Group[] & { keepZoom?: boolean }): ChainableInstance;
 
   useUtc(): boolean;
   useUtc(utc: boolean): ChainableInstance;
@@ -97,6 +97,12 @@ export interface TimelinesChartGenericInstance<ChainableInstance> {
 
   onLabelClick(cb: (label: string, group: string) => void): ChainableInstance;
   onSegmentClick(cb: (segment: {
+    group: string,
+    label: string,
+    val: Val,
+    timeRange: Range<TS>
+  }) => void): ChainableInstance;
+  onSegmentResize(cb: (segment: {
     group: string,
     label: string,
     val: Val,
