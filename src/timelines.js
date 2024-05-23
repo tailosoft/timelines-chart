@@ -84,13 +84,14 @@ export default Kapsule({
 
             for (let j= 0, jlen=rawData[i].data.length; j<jlen; j++) {
               for (let k= 0, klen=rawData[i].data[j].data.length; k<klen; k++) {
-                const { timeRange, val, labelVal } = rawData[i].data[j].data[k];
+                const { timeRange, val, labelVal, selected } = rawData[i].data[j].data[k];
                 state.completeFlatData.push({
                   group: group,
                   label: rawData[i].data[j].label,
                   timeRange: timeRange.map(d => new Date(d)),
                   val,
                   labelVal: labelVal !== undefined ? labelVal : val,
+                  selected,
                   data: rawData[i].data[j].data[k]
                 });
               }
@@ -976,7 +977,7 @@ export default Kapsule({
 
       let timelines = state.graph.selectAll('rect.series-segment').data(
         state.flatData.filter(dataFilter),
-        d => d.group + d.label + d.timeRange[0]
+        d => d.group + d.label + d.timeRange[0] + d.selected
       );
 
       timelines.exit()
@@ -1001,6 +1002,10 @@ export default Kapsule({
         .on('mouseout.lineTooltip', state.lineTooltip.hide)
         .on('mouseover.segmentTooltip', state.segmentTooltip.show)
         .on('mouseout.segmentTooltip', state.segmentTooltip.hide);
+
+      newSegments.filter(d => d.selected)
+        .attr('stroke', "rgb(99,229,227)")
+        .attr('stroke-width', 3)
 
       const resizeOffset = 10;
 
@@ -1064,27 +1069,58 @@ export default Kapsule({
             .attr('height', state.lineHeight)
             .style('fill-opacity', .8);
         })
-        .on('click', function (ev, s) {
-          if (state.onSegmentClick)
-            state.onSegmentClick(s);
+        .on('click', function (ev, d) {
+          if (ev.ctrlKey) {
+            if (d.selected) {
+              d.selected= false;
+              d3Select(this)
+                  .attr('stroke', null)
+            } else {
+              d.selected = true;
+              d3Select(this)
+                  .attr('stroke', "rgb(99,229,227)")
+                  .attr('stroke-width', 3);
+            }
+          } else {
+            clearSelection();
+            if (state.onSegmentClick) {
+              state.onSegmentClick(d);
+            }
+          }
         });
 
-      let startWidth;
-      let startX;
+      function getSelectedSegmentsOrPassedSegmentIfNoSelection(segment) {
+        if (segment.datum().selected) {
+          return state.graph.selectAll('rect.series-segment').filter(d => d.selected).nodes().map(d3Select);
+        } else {
+          return [segment]
+        }
+      }
+
+      function clearSelection() {
+        state.graph.selectAll('rect.series-segment').filter(d => d.selected).attr('stroke', null).each(function(d) {
+          d.selected = false;
+        });
+      }
+
+      let startWidths;
+      let startXs;
       let startPointerX;
       let dragBehavior;
 
       newSegments.call(d3Drag()
         .on('start', function (ev) {
           const segment = d3Select(this);
-          startWidth = +segment.attr('width');
-          startX = +segment.attr('x');
+          const segmentWidth = +segment.attr('width');
+          const mouseX = ev.x - +segment.attr('x');
+
+          startWidths = getSelectedSegmentsOrPassedSegmentIfNoSelection(segment).map(s => +s.attr('width'));
+          startXs = getSelectedSegmentsOrPassedSegmentIfNoSelection(segment).map(s => +s.attr('x'));
           startPointerX = d3Pointer(ev, this)[0];
-          const mouseX = ev.x - startX;
 
           if (mouseX <= resizeOffset) { // Close to the left side
             dragBehavior = 'resizeLeft';
-          } else if (mouseX >= startWidth - resizeOffset) { // Close to the right side
+          } else if (mouseX >= segmentWidth - resizeOffset) { // Close to the right side
             dragBehavior = 'resizeRight';
           } else {
             dragBehavior = 'move';
@@ -1093,33 +1129,40 @@ export default Kapsule({
         })
         .on('drag', function (ev) {
           const segment = d3Select(this);
+          const segments = getSelectedSegmentsOrPassedSegmentIfNoSelection(segment);
           const currentPointerX = d3Pointer(ev, this)[0];
           const xDiff = currentPointerX - startPointerX;
+
           dragging = true;
 
-          if (dragBehavior === 'resizeLeft') {
-            segment.attr('width', startWidth - xDiff).attr('x', startX + xDiff);
-          } else if (dragBehavior === 'resizeRight') {
-            segment.attr('width', startWidth + xDiff);
-          } else {
-            segment.attr('x', startX + xDiff);
+          for (let i= 0; i < segments.length; i++) {
+            const segment = segments[i];
+            if (dragBehavior === 'resizeLeft') {
+              segment.attr('width', startWidths[i] - xDiff).attr('x', startXs[i] + xDiff);
+            } else if (dragBehavior === 'resizeRight') {
+              segment.attr('width', startWidths[i] + xDiff);
+            } else {
+              segment.attr('x', startXs[i] + xDiff);
+            }
           }
         })
-        .on('end', function (ev, d) {
+        .on('end', function () {
           const segment = d3Select(this);
+          const segments = getSelectedSegmentsOrPassedSegmentIfNoSelection(segment);
+          for (const segment of segments) {
+            const newWidth = +segment.attr('width');
+            const newX = +segment.attr('x');
+            const timeRangeStart = state.xScale.invert(newX);
+            const timeRangeEnd = state.xScale.invert(newX + newWidth);
+
+            segment.datum({ ...segment.datum(), timeRange: [timeRangeStart, timeRangeEnd] });
+          }
+          if (state.onSegmentResize && dragging) {
+            state.onSegmentResize(segments.map(s => s.datum()));
+          }
           segment.attr('cursor', 'pointer');
-          const newWidth = +segment.attr('width');
-          const newX = +segment.attr('x');
-          const timeRangeStart = state.xScale.invert(newX);
-          const timeRangeEnd = state.xScale.invert(newX + newWidth);
-
-          // Update the timeRange in the data object 'd'
-          d.timeRange = [timeRangeStart, timeRangeEnd];
-          if (state.onSegmentResize && dragging)
-            state.onSegmentResize(d);
-
-          startWidth = undefined;
-          startX = undefined;
+          startWidths = undefined;
+          startXs = undefined;
           startPointerX = undefined;
           dragBehavior = undefined;
           dragging = false;

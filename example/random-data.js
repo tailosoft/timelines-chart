@@ -39,8 +39,9 @@ function getRandomData(ordinal = false) {
 
         return {
           timeRange: [start, end],
-          val: ordinal ? categoryLabels[Math.ceil(Math.random()*nCategories)] : Math.random()
+          val: ordinal ? categoryLabels[Math.ceil(Math.random()*nCategories)] : Math.random(),
           //labelVal: is optional - only displayed in the labels
+          //selected: is optional, allow to preselect items
         };
       });
 
